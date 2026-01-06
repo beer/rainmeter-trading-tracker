@@ -29,7 +29,7 @@ Here are some preview photos you can check out.
 
 ## Install
 
-1. Install Rainmeter if you don’t have it already.
+1. Install [Rainmeter](https://www.rainmeter.net/) if you don’t have it already.
 2. Load this skin in Rainmeter.
 3. Customize your trading setups and daily rules to track your trades.
 4. Use it while taking screenshots to document your trading journey.
