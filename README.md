@@ -8,6 +8,9 @@ This project is based on [rainmeter-todo](https://github.com/alperenozlu/rainmet
 Here are some preview photos you can check out.
 
 ![Screenshot of Rainmeter Trading-Tracker](photo-example-1.png)
+![Screenshot of Rainmeter Trading-Tracker](photo-example-3.png)
+![Screenshot of Rainmeter Trading-Tracker](photo-example-4.png)
+![Screenshot of Rainmeter Trading-Tracker](photo-example-5.png)
 ![Screenshot of Rainmeter Trading-Tracker](photo-example-2.png)
 
 
@@ -19,6 +22,7 @@ Here are some preview photos you can check out.
 - Hide edit options for a cleaner widget
 - Minimize the widget to show only the title
 - Show Date and Time on the widget
+- Can choice the widget size by menu
 - Highly customizable
 
 
@@ -69,6 +73,7 @@ Here are some preview photos you can check out.
 | BUTTON_COLOR        	| Font color of icon buttons                       	| Color Code        	| FEFEFE          	|
 | FONT_FACE           	| Font type to be used                             	| Inter or Roboto   	| Inter           	|
 | FONT_SIZE           	| Font size of texts                               	| Number (px)       	| 15              	|
+| TITLE                 | Write what you want to show on title              | String              | ICT Setup         |
 
 
 
