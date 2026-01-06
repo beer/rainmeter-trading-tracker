@@ -31,7 +31,7 @@ Here are some preview photos you can check out.
 
 ###### Via Installer
 
-+ Go to the [release](https://github.com/beer/rainmeter-trading-tracker/releases) page and download the latest .rmskin file.
++ Go to the [Releases](https://github.com/beer/rainmeter-trading-tracker/tree/main/Releases) page and download the latest .rmskin file.
 + Install skin with a double click to the downloaded file.
 + [Activate the skin](#activate-skin)
 
