@@ -19,7 +19,7 @@ NOW_UTC = os.time(os.date("!*t"))
 
 -- DEBUG SETTINGS: Simulation Mode / 調試設定：模擬穿越模式
 DEBUG_MODE = false
---DEBUG_NY_TIME_STR="2026-01-21 02:50:00"
+--DEBUG_NY_TIME_STR="2026-01-13 06:50:00"
 --DEBUG_NY_TIME_STR="" -- Target simulation time / 目標模擬時間
 
 local nextRetryTime = 0 
