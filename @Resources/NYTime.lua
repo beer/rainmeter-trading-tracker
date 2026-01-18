@@ -14,7 +14,8 @@ lastMacroState = false
 NOW_UTC = os.time(os.date("!*t"))
 
 DEBUG_MODE = false
-DEBUG_NY_TIME_STR="2026-01-13 10:51:51"
+--DEBUG_NY_TIME_STR="2026-01-14 09:37:00"
+DEBUG_NY_TIME_STR=""
 
 local nextRetryTime = 0 
 local RETRY_INTERVAL = 3600 -- 每小時 (3600秒) 重試一次
@@ -44,6 +45,8 @@ local earlyClose2026 = {
 
 local json
 local CurrentEvents = {}
+
+local lastShowNewsState = -1
 
 -- 配置：你感興趣的關鍵字
 local targetKeywords = { "GDP", "PPI", "CPI", "FOMC", "Unemployment" }
@@ -112,17 +115,11 @@ function Initialize()
     end
 end
 
-function ProcessNews(now_utc)
+function ProcessNews(ny_reference_ts)
     if not json then return end
 
     local displayList = {}
     local maxDisplay = 4
-
-    -- debug
-    if DEBUG_MODE then
-        local formattedDate = os.date("%b %d %a", now_utc)
-        print(formattedDate) -- 輸出結果範例: Jan 10 Fri
-    end
     
     local isBlinking = 0  -- 用於控制背景是否閃爍
     local countdownText = ""
@@ -131,23 +128,17 @@ function ProcessNews(now_utc)
     upcomingNewsTitle = ""
     upcomingNewsDiff = 0    -- 重設
 
-    -- debug
-    if DEBUG_MODE then
-        -- This is what I using to print the timestamp
-        local ev_time = os.time({year=2026, month=01, day=17, hour=08, min=30, sec=00})
-        local ev_utc = ev_time + (5 * 3600)
-        print(ev_utc)
-    end
-
     if CurrentEvents and #CurrentEvents > 0 then
         for i, event in ipairs(CurrentEvents) do
-            local diff = event.utc_timestamp - now_utc
+            --local diff = event.ny_timestamp - now_utc
+            -- 改用 ny_timestamp 與 ny_now_ts (紐約對紐約) 直接相減
+            local diff = event.ny_timestamp - ny_reference_ts
 
-            --print(event.title)
+            --print(event.title ..", time:".. os.date("%a %b %d %a %H:%M:%S", event.ny_timestamp))
 
             -- 處理顯示列表 (僅顯示未發生的)
             if diff > 0 then
-                local dayStr = os.date("%a", event.utc_timestamp)
+                local dayStr = os.date("%a", event.ny_timestamp)
                 local shortTime = event.ny_time:sub(-5)
                 
                 -- 如果是第一筆且在 15 分鐘內
@@ -196,6 +187,27 @@ function Update()
     local now_utc = GetCurrentTime(false)
         -- 拿 紐約時間 (自動處理 -4/-5) 算 Session 與顯示
     local ny_now_ts = GetCurrentTime(true)
+
+    if DEBUG_MODE then
+        -- 使用 !*t 確保格式化時不受到本地時區二次干擾
+        local fake_time_str = os.date("!%H:%M:%S", ny_now_ts + (os.difftime(os.time(), os.time(os.date("!*t")))))
+        -- 簡化版：如果上面的還是錯，直接用最土的方法
+        local d_ny = os.date("*t", ny_now_ts)
+        fake_time_str = string.format("%02d:%02d:%02d", d_ny.hour, d_ny.min, d_ny.sec)
+        --fake_time_str = fake_time_str - (2 * 3600)
+
+        -- 強制 Meter 斷開 Measure，改讀文字
+        SKIN:Bang('!SetOption', 'MeterNYClock', 'MeasureName', '') 
+        SKIN:Bang('!SetOption', 'MeterNYClock', 'Text', fake_time_str)
+        SKIN:Bang('!SetVariable', 'CurrentDate', os.date("%b %d %a %H:%M:%S", ny_now_ts))
+    else
+        -- 正常模式
+        SKIN:Bang('!SetOption', 'MeterNYClock', 'MeasureName', 'MeasureNYTime')
+        SKIN:Bang('!SetOption', 'MeterNYClock', 'Text', '%1')
+        SKIN:Bang('!SetVariable', 'CurrentDate', os.date("%b %d %a", ny_now_ts))
+    end
+
+   
 
     -- 核心檢查：如果目前資料無效 (全是舊聞)
     if not DEBUG_MODE and not CheckDataValidity() then
@@ -260,15 +272,9 @@ function Update()
     -- ==========================================
     if isPrepMode then
         -- 執行新聞處理，以便週日看下週計畫
-        ProcessNews(now_utc)
+        ProcessNews(ny_now_ts)
         
-        local hasNews = (CurrentEvents and #CurrentEvents > 0)
-        local showNewsVar = tonumber(SKIN:GetVariable('SHOW_NEWS')) or 0
-        
-        if hasNews then
-            SKIN:Bang('!SetVariable', 'HideNewsToggleButton', "0")
-            if showNewsVar == 1 then SKIN:Bang('!ShowMeterGroup', 'NewsGroup') end
-        end
+        ToggleNews(ny_now_ts, false)
 
         -- 動態設定顯示文字
         local msg = "WEEKEND PREP"
@@ -276,7 +282,7 @@ function Update()
         elseif isEarlyClosePassed then msg = earlyCloseName -- 例如 "EARLY CLOSE (13:00)"
         end
 
-        SKIN:Bang('!SetVariable', 'Message', "WEEKEND PREP")
+        SKIN:Bang('!SetVariable', 'Message', msg)
         SKIN:Bang('!SetVariable', 'MessageColor', LIGHT_COLOR)
         SKIN:Bang('!SetVariable', 'CurrentSessionColor', OUT_OF_SESSION_COLOR)
         SKIN:Bang('!SetVariable', 'HideMacro', "1")
@@ -293,11 +299,12 @@ function Update()
         SKIN:Bang('!Redraw')
         return "OK"
     end
+    
 
     -- ==========================================
     -- 邏輯 C：正常交易時段 (週日 17:00 ~ 週五 16:59)
     -- ==========================================
-    ProcessNews(now_utc)
+    ProcessNews(ny_now_ts)
     
     -- 15 mins
     local countdown_sec = 900
@@ -317,20 +324,9 @@ function Update()
     -- ==========================================
     -- 核心修正點：直接從 ny_now_ts 取得時間，不要用 Measure
     -- ==========================================
-    local d = os.date("*t", ny_now_ts)
-    local h, m, s = d.hour, d.min, d.sec
-
-    --[[
-    local ny_time_m = SKIN:GetMeasure('MeasureNYTime')
-    if not ny_time_m then return "Waiting for Measure..." end
+    local d_ny = os.date("*t", ny_now_ts)
+    local h, m, s = d_ny.hour, d_ny.min, d_ny.sec
     
-    local ny_time_str = ny_time_m:GetStringValue()
-    --if ny_time_str == "" then return "Initializing..." end
-
-    -- 拆解 時:分:秒
-    local h, m, s = ny_time_str:match("(%d+):(%d+):(%d+)")
-    h, m, s = tonumber(h), tonumber(m), tonumber(s)
-    ]]
     local hhmm = h * 100 + m
     local total_now_seconds = (h * 3600) + (m * 60) + s
 
@@ -505,7 +501,7 @@ function Update()
 
     -- 邏輯 B：如果有新聞倒數 (優先於 Session)
     elseif upcomingNewsCD ~= "" then
-        finalMessage = "NEWS: " .. upcomingNewsTitle .. " in"
+        finalMessage = "NEWS: " .. upcomingNewsTitle
         finalCountdown = upcomingNewsCD
         finalMsgColor = WHITE_COLOR       -- 新聞時讓文字全亮
         finalBarColor = ALERT_COLOR       -- 倒數條變白色 (共用變數)
@@ -556,50 +552,12 @@ function Update()
     -- ==========================================
     -- 核心修正：統一控制新聞群組顯示與按鈕隱藏
     -- ==========================================
+    ToggleNews(ny_now_ts, false)
     
-    -- 1. 重新確認是否有新聞 (由 ProcessNews 填充的 CurrentEvents)
-    local hasNews = false
-    local now_utc = GetCurrentTime(false)
-
-    if CurrentEvents and #CurrentEvents > 0 then
-        -- 檢查是否還有未來的事件
-        for _, ev in ipairs(CurrentEvents) do
-            if ev.utc_timestamp - now_utc > 0 then
-                hasNews = true
-                break
-            end
-        end
-    end
-
-    -- 2. 獲取使用者開關狀態 (0 或 1)
-    local showNewsVar = tonumber(SKIN:GetVariable('SHOW_NEWS')) or 0
-    
-    -- 3. 執行邏輯判斷
-    if hasNews then
-        -- 有新聞時：顯示按鈕
-        SKIN:Bang('!SetVariable', 'HideNewsToggleButton', '0')
-        
-        -- 判斷是否展開面板 (使用者想看才展開)
-        if showNewsVar == 1 then
-            SKIN:Bang('!ShowMeterGroup', 'NewsGroup')
-        else
-            SKIN:Bang('!HideMeterGroup', 'NewsGroup')
-        end
-        --print("HideNewsToggleButton:0,SHOW_NEWS:" .. showNewsVar .. ", hasNews:" .. tostring(hasNews))
-    else
-        -- 沒新聞時：隱藏按鈕與面板
-        SKIN:Bang('!SetVariable', 'HideNewsToggleButton', '1')
-        SKIN:Bang('!HideMeterGroup', 'NewsGroup')
-        --print("HideNewsToggleButton:1,SHOW_NEWS:" .. showNewsVar .. ", hasNews:" .. tostring(hasNews))
-    end
-
-    SKIN:Bang('!UpdateMeter', 'MeterNews')
-    SKIN:Bang('!UpdateMeter', 'MeterNewsBG')
-
+    SKIN:Bang('!UpdateMeter', 'MeterNYClock') -- 假設你的時鐘 Meter 叫這個名字
     SKIN:Bang('!Redraw')
 
     return "OK"
-    --return "NY: " .. ny_time_str .. " | Session: " .. resName
 end
 
 -- 輸入 "80,80,80,150", 輸出 "80,80,80,alpha"
@@ -625,10 +583,10 @@ function OnDownloadComplete()
     local tempData = FilterNews(rawJsonStr)
     
     -- 驗貨：檢查這份新抓到的資料有沒有未來新聞
-    local now_utc = GetCurrentTime(false)
+    local ny_now = GetCurrentTime(true)
     local isDataNew = false
     for _, ev in ipairs(tempData) do
-        if ev.utc_timestamp > now_utc then
+        if ev.ny_timestamp > ny_now then
             isDataNew = true
             break
         end
@@ -719,13 +677,27 @@ function FilterNews(rawData)
             -- 2. 解析原始時間 (ISO 格式)
             local year, month, day, hr, min, sc = event.date:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)")
             
-            -- 3. 核心處理：將這組數字直接重新格式化為「純紐約時間」
-            -- 我們不再存那個帶有時區尾巴的 ISO 字串，改存易讀格式
+            -- 1. 取得字面上的紐約時間字串
             local ny_date_string = string.format("%s-%s-%s %s:%s", year, month, day, hr, min)
 
-            -- 4. 計算 UTC Timestamp (為了讓 ProcessNews 依然能精準倒數)
-            local ev_time = os.time({year=year, month=month, day=day, hour=hr, min=min, sec=sc})
-            local ev_utc = ev_time + (5 * 3600) 
+            -- 2. 核心修正：取得紐約當地的原始時間戳 (不做時區轉換)
+            -- 我們利用 os.time 加上 isdst=false 來取得一個純淨的基準
+            --local local_now = os.time()
+            --local utc_now = os.time(os.date("!*t"))
+            --ocal local_diff = os.difftime(local_now, utc_now)
+            
+            local ev_ny_ts = os.time({year=year, month=month, day=day, hour=hr, min=min, sec=sc})
+            --[[
+            local ev_ny_ts = os.time({
+                year  = tonumber(year),
+                month = tonumber(month),
+                day   = tonumber(day),
+                hour  = tonumber(hr),
+                min   = tonumber(min),
+                sec   = tonumber(sc),
+                isdst = -1 -- 讓 Lua 根據日期自動決定是 -4 還是 -5
+            })
+            ]]
 
             -- 5. 存入新表格
             table.insert(filtered, {
@@ -733,7 +705,7 @@ function FilterNews(rawData)
                 country = event.country,
                 impact = event.impact,
                 ny_time = ny_date_string,   -- 這是給你看的紐約時間
-                utc_timestamp = ev_utc      -- 這是給程式算的秒數
+                ny_timestamp = ev_ny_ts      -- 儲存紐約本地時間戳
             })
         end
     end
@@ -764,48 +736,112 @@ end
 -- ==========================================
 function GetCurrentTime(applyOffset)
     local base_utc
+
+    -- 取得當前電腦本地與 UTC 的精確秒數差（用於校正 os.time 的自動偏移）
+    local local_now = os.time()
+    local utc_now = os.time(os.date("!*t"))
+    local local_to_utc_diff = os.difftime(local_now, utc_now)
+    -- 增加安全檢查：DEBUG_MODE 開啟且字串不為空且長度足夠
+    local is_debug_valid = DEBUG_MODE and (DEBUG_NY_TIME_STR ~= nil) and (string.len(DEBUG_NY_TIME_STR) > 10)
     
     -- 1. 取得基準 UTC 時間
-    if DEBUG_MODE then
-        local debugStr = DEBUG_NY_TIME_STR
-        local y, m, d, h, min, s = debugStr:match("(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)")
-        if y then
-            -- 假設 Debug 字串是紐約時間，我們先推回 UTC (Debug 基準建議用 -5)
-            base_utc = os.time({year=y, month=m, day=d, hour=h, min=min, sec=s}) + (5 * 3600)
-        else
-            base_utc = os.time(os.date("!*t"))
+    if is_debug_valid then
+        local y, m, d, h, min, s = DEBUG_NY_TIME_STR:match("(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)")
+        if not y then 
+            print(">>> [Error] DEBUG_NY_TIME_STR format error!")
+            return os.time() -- 格式錯了就回傳真實時間，防止崩潰
         end
+        -- 加上皮膚運行秒數，讓假時間會走
+        local elapsed = math.floor(os.clock())
+
+        -- 1. 取得「字面上」的時間戳
+        local target_ts = os.time({year=y, month=m, day=d, hour=h, min=min, sec=s}) + elapsed
+        
+        -- 2. 如果 applyOffset 為 true，我們要回傳「假紐約時間」
+        if applyOffset then return target_ts end
+        
+        -- 3. 如果要 UTC，我們必須把 target_ts 轉回真正的 UTC
+        -- 既然你填的是紐約時間，我們就手動「減掉」當下的紐約偏移來求 UTC
+        -- 這裡先執行下面的 DST 判定來決定 offset，所以先給個暫定值
+        base_utc = target_ts - (offset * 3600)
     else
         base_utc = os.time(os.date("!*t"))
     end
 
-    -- 2. 如果不需偏移，直接回傳 UTC
-    if not applyOffset then return base_utc end
-
-    -- 3. 自動計算該年份的 DST 範圍 (美國標準：3月第二個週日 ~ 11月第一個週日)
+    -- 2. 自動計算 DST 範圍 (這會更新全域變數 offset)
     local nowT = os.date("!*t", base_utc)
     local year = nowT.year
     local dst_start = os.time({year=year, month=3, day=14 - (os.date("*t", os.time({year=year, month=3, day=1})).wday - 1), hour=7})
     local dst_end = os.time({year=year, month=11, day=7 - (os.date("*t", os.time({year=year, month=11, day=1})).wday - 1), hour=6})
     
-    -- 4. 判定偏移量
     offset = (base_utc >= dst_start and base_utc < dst_end) and -4 or -5
-    
-    -- 順便更新 Skin 的變數，讓 .ini 也能顯示正確的 UTC 字樣
     SKIN:Bang('!SetVariable', 'NYOffset', offset)
-    
+
+    if not applyOffset then 
+        -- 重新計算精確的 UTC
+        if is_debug_valid then
+            local y, m, d, h, min, s = DEBUG_NY_TIME_STR:match("(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)")
+            local target_ts = os.time({year=y, month=m, day=d, hour=h, min=min, sec=s}) + math.floor(os.clock())
+            return target_ts - (offset * 3600)
+        end
+        return base_utc 
+    end
     return base_utc + (offset * 3600)
 end
 
 function CheckDataValidity()
-    local now_utc = GetCurrentTime(false)
+    -- 核心修正：使用紐約時間戳作為比對基準
+    local ny_now = GetCurrentTime(true) 
     if not CurrentEvents or #CurrentEvents == 0 then return false end
     
-    -- 檢查是否有任何一則新聞的時間是在「現在」之後
     for _, ev in ipairs(CurrentEvents) do
-        if ev.utc_timestamp > now_utc then
-            return true -- 找到未來新聞，資料有效
+        -- 比對 紐約新聞時間 vs 紐約現在時間
+        if ev.ny_timestamp > ny_now then
+            return true 
         end
     end
-    return false -- 全是舊聞，資料無效
+    return false
+end
+
+function ToggleNews(ny_now_ts, redraw)
+    local showNewsVar = tonumber(SKIN:GetVariable('SHOW_NEWS')) or 0
+    local hasNews = false
+    --local ny_now_ts = GetCurrentTime(true)
+    -- 判定是否有未來新聞
+    if CurrentEvents and #CurrentEvents > 0 then
+        for _, ev in ipairs(CurrentEvents) do
+            if ev.ny_timestamp > ny_now_ts then
+                hasNews = true
+                break
+            end
+        end
+    end
+    
+    if hasNews then
+        -- 1. 顯示開關 Icon
+        SKIN:Bang('!SetVariable', 'HideNewsToggleButton', '0')
+        
+        -- 2. 根據 lastShowNewsState 控制面板開展/收合
+        if showNewsVar ~= lastShowNewsState then
+            if showNewsVar == 1 then
+                SKIN:Bang('!ShowMeterGroup', 'NewsGroup')
+            else
+                SKIN:Bang('!HideMeterGroup', 'NewsGroup')
+            end
+            lastShowNewsState = showNewsVar
+        end
+    else
+        -- 沒新聞時徹底隱藏
+        SKIN:Bang('!SetVariable', 'HideNewsToggleButton', '1')
+        SKIN:Bang('!HideMeterGroup', 'NewsGroup')
+        lastShowNewsState = 0
+    end
+
+    SKIN:Bang('!UpdateMeter', 'MeterNews')
+    SKIN:Bang('!UpdateMeter', 'MeterNewsBG')
+    if redraw then
+        SKIN:Bang('!Redraw')
+    end
+
+    return "OK"
 end
