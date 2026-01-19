@@ -7,6 +7,10 @@
 # 如果你想保留範例規則，請註解掉下面這兩行
 **/tasks-*.txt
 **/trash-*.txt
+!**/tasks-Daily.txt
+!**/tasks-OTE.txt
+!**/tasks-PO3.txt
+
 
 # 忽略 Lua 產生的動態包含檔 (Ignore dynamic include files)
 **/DynamicMeters-*.inc
