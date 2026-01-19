@@ -1,0 +1,5 @@
+# 忽略 News 資料夾下的所有內容
+News/*
+
+# 但不要忽略 .gitkeep 檔案，這樣資料夾架構才會被保留
+!News/.gitkeep
