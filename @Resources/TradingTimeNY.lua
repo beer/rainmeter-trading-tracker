@@ -246,7 +246,6 @@ function Update()
     -- D. 準備模式總結
     -- 只有在：週日前半段 OR 假日後半段 OR 提早收盤後半段，才顯示 PREP
     local isPrepMode = isSundayBeforeOpen or isHolidayClosed or isEarlyClosePassed
-    print("PrepMode: " .. tostring(isPrepMode))
 
     -- [Path 1] Market Strictly Closed / 徹底關閉路徑
     if isStrictlyClosed then
