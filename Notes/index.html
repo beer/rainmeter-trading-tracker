@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            background: rgba(30, 30, 30, 0.9); /* 半透明背景 */
+            color: white;
+            font-family: "Microsoft JhengHei", sans-serif;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            overflow: hidden;
+            border-radius: 10px;
+        }
+        input {
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            padding: 10px;
+            font-size: 16px;
+            margin-bottom: 10px;
+            outline: none;
+        }
+        button {
+            background: #0078d7;
+            border: none;
+            color: white;
+            padding: 10px;
+            cursor: pointer;
+        }
+        button:hover { background: #005a9e; }
+    </style>
+</head>
+<body>
+    <input type="text" id="userInput" placeholder="在此輸入中文內容..." autofocus>
+    <button onclick="sendData()">送出並更新</button>
+
+    <script>
+        async function sendData() {
+            const text = document.getElementById('userInput').value;
+            if (!text) return;
+
+            // 這裡替換成你的 Server API 網址
+            // 範例：推送到本地或遠端 JSON 處理程序
+            try {
+                const response = await fetch('https://your-api.com/update', {
+                    method: 'POST',
+                    body: JSON.stringify({ content: text }),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    window.close(); // 傳送成功後自動關閉視窗
+                }
+            } catch (e) {
+                alert("傳送失敗：" + e);
+            }
+        }
+        
+        // 按下 Enter 鍵直接送出
+        document.getElementById('userInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') sendData();
+        });
+    </script>
+</body>
+</html>
